@@ -81,6 +81,29 @@
         .add-note-button:hover {
             background-color: #1d4ed8; /* Darker blue on hover */
         }
+        .edit-button {
+            background-color: #3b82f6; /* Lighter blue for edit */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+        .edit-button:hover {
+            background-color: #2563eb;
+        }
+        .cancel-edit-button {
+            background-color: #6b7280; /* Gray for cancel edit */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+        .cancel-edit-button:hover {
+            background-color: #4b5563;
+        }
+
 
         /* Hamburger Menu Styles */
         .hamburger-menu-icon {
@@ -280,10 +303,16 @@
                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-y"
                       rows="5" /* Set rows attribute for textarea height */
                       placeholder="Type your note here..."></textarea>
-            <button id="add-note-button"
-                    class="add-note-button w-full mt-4 hover:shadow-lg">
-                Add Note (Ctrl+Enter)
-            </button>
+            <div class="flex flex-col sm:flex-row gap-3 mt-4">
+                <button id="add-update-note-button"
+                        class="add-note-button flex-grow hover:shadow-lg">
+                    Add Note (Ctrl+Enter)
+                </button>
+                <button id="cancel-edit-button"
+                        class="cancel-edit-button flex-grow hover:shadow-lg hidden">
+                    Cancel Edit
+                </button>
+            </div>
         </div>
 
         <!-- Active Notes Section -->
@@ -351,6 +380,7 @@
                 <li>Click "Archive" on a note to move it to the "Archived Notes" section.</li>
                 <li>Click "Unarchive" on an archived note to move it back to "Active Notes".</li>
                 <li>To delete a note, first "Archive" it, then a "Delete" button will appear next to it. <span class="font-bold text-red-600">Deletion is permanent!</span></li>
+                <li>To edit an active note, click the "Edit" button next to it. Its content will load into the text area for modification. Click "Update Note" or press Ctrl+Enter to save changes.</li>
             </ul>
 
             <h3 class="text-xl font-semibold text-gray-700 mb-2">3. Menu Options (Hamburger Icon &#9776;):</h3>
@@ -382,7 +412,8 @@
     <script>
         // Get references to DOM elements
         const noteTextarea = document.getElementById('note-textarea');
-        const addNoteButton = document.getElementById('add-note-button');
+        const addUpdateNoteButton = document.getElementById('add-update-note-button'); // Renamed
+        const cancelEditButton = document.getElementById('cancel-edit-button'); // New
         const activeNotesList = document.getElementById('active-notes-list');
         const archivedNotesList = document.getElementById('archived-notes-list');
         const noActiveNotesMessage = document.getElementById('no-active-notes');
@@ -421,6 +452,9 @@
 
         // State for double confirmation (for Clear All Notes)
         let currentConfirmationStep = 0; // 0: no confirmation, 1: first step, 2: second step
+
+        // Variable to hold the ID of the note currently being edited
+        let editingNoteId = null;
 
         /**
          * Generates a unique ID for a note.
@@ -522,7 +556,7 @@
             timestampSpan.textContent = `Recorded: ${formatTimestamp(note.timestamp)}`;
             noteDiv.appendChild(timestampSpan);
 
-            // Actions (Archive/Unarchive, Delete)
+            // Actions (Archive/Unarchive, Edit, Delete)
             const actionsDiv = document.createElement('div');
             actionsDiv.classList.add('note-actions', 'mt-2');
 
@@ -537,6 +571,15 @@
             }
             archiveButton.addEventListener('click', () => toggleArchiveNote(note.id));
             actionsDiv.appendChild(archiveButton);
+
+            // ONLY show edit button if the note is NOT archived
+            if (!note.archived) {
+                const editButton = document.createElement('button');
+                editButton.textContent = 'Edit';
+                editButton.classList.add('bg-blue-500', 'hover:bg-blue-600', 'px-3', 'py-1', 'rounded-md', 'text-white', 'text-xs', 'font-medium', 'transition-colors', 'duration-200');
+                editButton.addEventListener('click', () => startEditMode(note.id));
+                actionsDiv.appendChild(editButton);
+            }
 
             // ONLY show delete button if the note is archived
             if (note.archived) {
@@ -588,25 +631,82 @@
         }
 
         /**
-         * Adds a new note based on the textarea content.
+         * Handles either adding a new note or updating an existing one based on editing state.
          */
-        function addNote() {
+        function handleNoteSubmission() {
             const noteText = noteTextarea.value.trim();
-            if (noteText) {
-                const newNote = {
-                    id: generateUniqueId(),
-                    text: noteText,
-                    timestamp: new Date().toISOString(), // ISO string for easy storage and parsing
-                    archived: false
-                };
-                notes.push(newNote);
+            if (!noteText) {
+                console.log('Note content cannot be empty.');
+                return;
+            }
+
+            if (editingNoteId) {
+                updateExistingNote(editingNoteId, noteText);
+            } else {
+                addNewNote(noteText);
+            }
+        }
+
+        /**
+         * Adds a new note to the array.
+         * @param {string} text - The text content of the new note.
+         */
+        function addNewNote(text) {
+            const newNote = {
+                id: generateUniqueId(),
+                text: text,
+                timestamp: new Date().toISOString(),
+                archived: false
+            };
+            notes.push(newNote);
+            saveNotes();
+            renderNotes();
+            noteTextarea.value = ''; // Clear textarea after adding
+        }
+
+        /**
+         * Updates an existing note in the array.
+         * @param {string} id - The ID of the note to update.
+         * @param {string} newText - The new text content for the note.
+         */
+        function updateExistingNote(id, newText) {
+            const noteIndex = notes.findIndex(note => note.id === id);
+            if (noteIndex !== -1) {
+                notes[noteIndex].text = newText;
+                notes[noteIndex].timestamp = new Date().toISOString(); // Update timestamp on edit
                 saveNotes();
                 renderNotes();
-                noteTextarea.value = ''; // Clear the textarea
+                exitEditMode(); // Exit edit mode after updating
             } else {
-                // You could add a visual cue for the user here, e.g., highlight the textarea
-                console.log('Note content cannot be empty.');
+                console.error('Note not found for update:', id);
             }
+        }
+
+        /**
+         * Enters edit mode: populates textarea with note content and adjusts UI.
+         * @param {string} id - The ID of the note to edit.
+         */
+        function startEditMode(id) {
+            const noteToEdit = notes.find(note => note.id === id);
+            if (noteToEdit && !noteToEdit.archived) {
+                editingNoteId = id;
+                noteTextarea.value = noteToEdit.text;
+                addUpdateNoteButton.textContent = 'Update Note';
+                cancelEditButton.classList.remove('hidden'); // Show cancel button
+                noteTextarea.focus(); // Focus on textarea for immediate editing
+            } else {
+                console.warn('Attempted to edit an archived note or note not found.');
+            }
+        }
+
+        /**
+         * Exits edit mode: clears textarea and resets UI.
+         */
+        function exitEditMode() {
+            editingNoteId = null;
+            noteTextarea.value = '';
+            addUpdateNoteButton.textContent = 'Add Note (Ctrl+Enter)';
+            cancelEditButton.classList.add('hidden'); // Hide cancel button
         }
 
         /**
@@ -616,6 +716,10 @@
         function toggleArchiveNote(id) {
             const noteIndex = notes.findIndex(note => note.id === id);
             if (noteIndex !== -1) {
+                // If we are currently editing this note and it's being archived, exit edit mode
+                if (editingNoteId === id && !notes[noteIndex].archived) {
+                    exitEditMode();
+                }
                 notes[noteIndex].archived = !notes[noteIndex].archived;
                 saveNotes();
                 renderNotes();
@@ -897,7 +1001,8 @@
         }
 
         // Event Listeners
-        addNoteButton.addEventListener('click', addNote);
+        addUpdateNoteButton.addEventListener('click', handleNoteSubmission); // Now handles both Add and Update
+        cancelEditButton.addEventListener('click', exitEditMode); // New: Cancel Edit button
 
         // Hamburger Menu Event Listeners
         hamburgerIcon.addEventListener('click', () => {
@@ -924,13 +1029,13 @@
         closeAboutModalBtn.addEventListener('click', hideAboutModal);
 
 
-        // Allow adding note with Ctrl+Enter key
+        // Allow adding/updating note with Ctrl+Enter key
         noteTextarea.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { // metaKey for Cmd on Mac
                 event.preventDefault(); // Prevent default new line behavior
-                addNote();
+                handleNoteSubmission();
             }
-        }); 
+        });
 
         // Initial load and render of notes when the page loads
         document.addEventListener('DOMContentLoaded', () => {
