@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timestamped Notes</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general body */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+            display: flex; /* Use flexbox to center the container */
+            justify-content: center; /* Center horizontally */
+            align-items: flex-start; /* Align to the top, allowing scroll if content is long */
+            min-height: 100vh; /* Full viewport height */
+            padding: 2rem 1rem; /* Overall padding for the page */
+            box-sizing: border-box; /* Include padding in body's total width */
+            position: relative; /* Needed for absolute positioning of hamburger */
+            overflow-x: hidden; /* Prevent horizontal scroll when menu slides out */
+        }
+        .container {
+            /* Explicitly set max-width to 500px and use !important to override Tailwind defaults */
+            max-width: 500px !important; /* Updated width */
+            width: 100%; /* Ensure it's responsive on smaller screens up to max-width */
+            margin: 0 auto; /* Center the container itself within the flex parent (body) */
+            background-color: #ffffff;
+            border-radius: 1rem; /* More rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Soft shadow */
+            padding: 2rem; /* Padding inside the container */
+            box-sizing: border-box; /* Ensure padding is included in the element's total width */
+        }
+        /* Style for note items */
+        .note-item {
+            background-color: #f9fafb; /* Lighter background for notes */
+            border: 1px solid #e5e7eb; /* Light border */
+            border-radius: 0.75rem; /* Slightly rounded corners for notes */
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: all 0.2s ease-in-out; /* Smooth transition for visual changes */
+        }
+        .note-item.archived {
+            background-color: #eff6ff; /* Light blue for archived notes */
+            border-color: #bfdbfe; /* Muted blue border */
+            opacity: 0.7; /* Slightly faded */
+            text-decoration: line-through; /* Strikethrough for archived text */
+        }
+        .note-content {
+            flex-grow: 1; /* Allow content to take available space */
+            word-wrap: break-word; /* Break long words */
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
+        }
+        .note-timestamp {
+            font-size: 0.8rem;
+            color: #6b7280; /* Gray text for timestamp */
+            text-align: right; /* Align timestamp to the right */
+        }
+        .note-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end; /* Align buttons to the right */
+        }
+        .note-actions button {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease;
+        }
+        .add-note-button {
+            background-color: #2563eb; /* Blue button */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+        .add-note-button:hover {
+            background-color: #1d4ed8; /* Darker blue on hover */
+        }
+
+        /* Hamburger Menu Styles */
+        .hamburger-menu-icon {
+            position: absolute;
+            top: 2rem;
+            left: 1rem;
+            font-size: 2.5rem; /* Larger icon */
+            cursor: pointer;
+            color: #4b5563; /* Darker gray icon */
+            z-index: 1001; /* Above container */
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease;
+        }
+        .hamburger-menu-icon:hover {
+            background-color: #e5e7eb;
+        }
+
+        .menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: flex-start; /* Align menu to the left */
+            align-items: stretch; /* Stretch content vertically */
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .menu-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .menu-content {
+            background-color: #ffffff;
+            width: 280px; /* Fixed width for the menu panel */
+            max-width: 80%; /* Ensure it's responsive on smaller screens */
+            padding: 2rem 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transform: translateX(-100%); /* Start off-screen to the left */
+            transition: transform 0.3s ease-out;
+            position: relative; /* For close button positioning */
+            display: flex;
+            flex-direction: column;
+            gap: 1rem; /* Space between menu items */
+        }
+        .menu-overlay.show .menu-content {
+            transform: translateX(0); /* Slide in */
+        }
+
+        .close-menu-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            font-size: 2.5rem;
+            background: none;
+            border: none;
+            color: #4b5563;
+            cursor: pointer;
+            line-height: 1; /* Adjust line height for better centering of X */
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease;
+        }
+        .close-menu-btn:hover {
+            background-color: #e5e7eb;
+        }
+
+        .menu-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 2rem; /* Space below close button */
+        }
+
+        .menu-button {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            text-align: left;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            background-color: #f3f4f6; /* Light background for menu buttons */
+            color: #374151; /* Dark text for menu buttons */
+            border: none;
+            cursor: pointer;
+        }
+        .menu-button:hover {
+            background-color: #e5e7eb;
+            color: #1f2937;
+        }
+        /* Specific colors for visual consistency if desired, overriding menu-button */
+        #menu-download-notes { /* Green tint */
+            background-color: #ecfdf5;
+            color: #047857;
+        }
+        #menu-download-notes:hover {
+            background-color: #d1fae5;
+        }
+        #menu-import-notes { /* Purple tint */
+            background-color: #f3e8ff;
+            color: #6d28d9;
+        }
+        #menu-import-notes:hover {
+            background-color: #e9d5ff;
+        }
+        #menu-clear-all-notes { /* Red tint */
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+        #menu-clear-all-notes:hover {
+            background-color: #fecaca;
+        }
+
+
+        /* Modal specific styles (reused for confirmation, help, about) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            max-width: 90%;
+            width: 400px; /* Default width for modals */
+            text-align: center;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+            max-height: 90vh; /* Limit height to prevent overflow on small screens */
+            overflow-y: auto; /* Enable scrolling for long content */
+        }
+        .modal-overlay.show .modal-content {
+            transform: translateY(0);
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        .modal-buttons button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+            cursor: pointer;
+        }
+        .modal-buttons .confirm-btn {
+            background-color: #ef4444; /* Red for confirm */
+            color: white;
+        }
+        .modal-buttons .confirm-btn:hover {
+            background-color: #dc2626;
+        }
+        .modal-buttons .cancel-btn {
+            background-color: #e5e7eb; /* Light gray for cancel */
+            color: #374151;
+        }
+        .modal-buttons .cancel-btn:hover {
+            background-color: #d1d5db;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hamburger-menu-icon" id="hamburger-icon">
+            &#9776; <!-- Unicode hamburger icon -->
+        </div>
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Timestamped Notes App</h1>
+
+        <!-- Note Input Section -->
+        <div class="mb-8 p-4 bg-gray-50 rounded-lg shadow-inner">
+            <label for="note-textarea" class="block text-gray-700 text-lg font-semibold mb-2">Take a new note:</label>
+            <textarea id="note-textarea"
+                      class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-y"
+                      rows="5" /* Set rows attribute for textarea height */
+                      placeholder="Type your note here..."></textarea>
+            <button id="add-note-button"
+                    class="add-note-button w-full mt-4 hover:shadow-lg">
+                Add Note (Ctrl+Enter)
+            </button>
+        </div>
+
+        <!-- Active Notes Section -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b-2 border-blue-400 pb-2">Active Notes</h2>
+            <div id="active-notes-list" class="space-y-4">
+                <!-- Active notes will be rendered here -->
+                <p id="no-active-notes" class="text-gray-500 italic text-center hidden">No active notes yet. Start by adding one above!</p>
+            </div>
+        </div>
+
+        <!-- Archived Notes Section -->
+        <div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b-2 border-blue-400 pb-2">Archived Notes</h2>
+            <div id="archived-notes-list" class="space-y-4">
+                <!-- Archived notes will be rendered here -->
+                <p id="no-archived-notes" class="text-gray-500 italic text-center hidden">No archived notes yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hamburger Menu Overlay -->
+    <div id="menu-overlay" class="menu-overlay">
+        <div class="menu-content">
+            <button id="close-menu-btn" class="close-menu-btn">&times;</button>
+            <h3 class="text-2xl font-bold text-gray-800 mb-6">Menu</h3>
+            <div class="menu-items">
+                <!-- File input is hidden and triggered by the import button -->
+                <input type="file" id="csv-file-input" accept=".csv" class="hidden" />
+
+                <button id="menu-download-notes" class="menu-button">Download Notes (CSV)</button>
+                <button id="menu-import-notes" class="menu-button">Import Notes (CSV)</button>
+                <button id="menu-clear-all-notes" class="menu-button">Clear All Notes</button>
+                <button id="menu-help" class="menu-button">Help</button>
+                <button id="menu-about" class="menu-button">About</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirmation Modal (for Clear All Notes) -->
+    <div id="confirmation-modal" class="modal-overlay">
+        <div class="modal-content">
+            <p id="modal-message" class="text-lg font-semibold text-gray-800 mb-4">Are you sure?</p>
+            <div class="modal-buttons">
+                <button id="modal-confirm-btn" class="confirm-btn">Yes</button>
+                <button id="modal-cancel-btn" class="cancel-btn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal-overlay">
+        <div class="modal-content text-left">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Help & Usage Guide</h2>
+            <h3 class="text-xl font-semibold text-gray-700 mb-2">1. Taking Notes:</h3>
+            <ul class="list-disc list-inside mb-4 text-gray-700">
+                <li>Type your notes into the large text area at the top.</li>
+                <li>Press <span class="font-bold">Ctrl + Enter</span> (or <span class="font-bold">Cmd + Enter</span> on Mac) to save your note. Just pressing Enter will add a new line.</li>
+                <li>You can also click the "Add Note (Ctrl+Enter)" button.</li>
+            </ul>
+
+            <h3 class="text-xl font-semibold text-gray-700 mb-2">2. Managing Notes:</h3>
+            <ul class="list-disc list-inside mb-4 text-gray-700">
+                <li>Notes appear in the "Active Notes" section, most recent first.</li>
+                <li>Click "Archive" on a note to move it to the "Archived Notes" section.</li>
+                <li>Click "Unarchive" on an archived note to move it back to "Active Notes".</li>
+                <li>To delete a note, first "Archive" it, then a "Delete" button will appear next to it. <span class="font-bold text-red-600">Deletion is permanent!</span></li>
+            </ul>
+
+            <h3 class="text-xl font-semibold text-gray-700 mb-2">3. Menu Options (Hamburger Icon &#9776;):</h3>
+            <ul class="list-disc list-inside mb-4 text-gray-700">
+                <li><span class="font-bold">Download Notes (CSV):</span> Exports all your notes (active and archived) into a CSV file that you can open in spreadsheet software.</li>
+                <li><span class="font-bold">Import Notes (CSV):</span> Allows you to select a CSV file from your computer to add notes to your current list. Existing notes will not be deleted.</li>
+                <li><span class="font-bold">Clear All Notes:</span> <span class="font-bold text-red-600">Permanently deletes ALL notes.</span> This requires two confirmations for safety.</li>
+                <li><span class="font-bold">Help:</span> Displays this help guide.</li>
+                <li><span class="font-bold">About:</span> Provides information about the app.</li>
+            </ul>
+            <div class="modal-buttons">
+                <button id="close-help-modal" class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="about-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">About This App</h2>
+            <p class="text-gray-700 mb-4">This Timestamped Notes App was written by <span class="font-bold">Gemini</span> based on prompts from <span class="font-bold">Lance Bachmeier</span>.</p>
+            <p class="text-gray-600 text-sm">Version 1.0</p>
+            <div class="modal-buttons">
+                <button id="close-about-modal" class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get references to DOM elements
+        const noteTextarea = document.getElementById('note-textarea');
+        const addNoteButton = document.getElementById('add-note-button');
+        const activeNotesList = document.getElementById('active-notes-list');
+        const archivedNotesList = document.getElementById('archived-notes-list');
+        const noActiveNotesMessage = document.getElementById('no-active-notes');
+        const noArchivedNotesMessage = document.getElementById('no-archived-notes');
+
+        // Hamburger Menu elements
+        const hamburgerIcon = document.getElementById('hamburger-icon');
+        const menuOverlay = document.getElementById('menu-overlay');
+        const closeMenuBtn = document.getElementById('close-menu-btn');
+        const menuDownloadNotesBtn = document.getElementById('menu-download-notes');
+        const menuImportNotesBtn = document.getElementById('menu-import-notes');
+        const menuClearAllNotesBtn = document.getElementById('menu-clear-all-notes');
+        const menuHelpBtn = document.getElementById('menu-help');
+        const menuAboutBtn = document.getElementById('menu-about');
+
+        const csvFileInput = document.getElementById('csv-file-input'); // File input (still hidden)
+
+        // Modal elements (reused for various popups)
+        const confirmationModal = document.getElementById('confirmation-modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+        const helpModal = document.getElementById('help-modal');
+        const closeHelpModalBtn = document.getElementById('close-help-modal');
+
+        const aboutModal = document.getElementById('about-modal');
+        const closeAboutModalBtn = document.getElementById('close-about-modal');
+
+
+        // Key for local storage
+        const LOCAL_STORAGE_KEY = 'timestamped_notes_app';
+
+        // Initialize notes array (will be loaded from localStorage)
+        let notes = [];
+
+        // State for double confirmation (for Clear All Notes)
+        let currentConfirmationStep = 0; // 0: no confirmation, 1: first step, 2: second step
+
+        /**
+         * Generates a unique ID for a note.
+         * @returns {string} A unique ID.
+         */
+        function generateUniqueId() {
+            return Date.now().toString(36) + Math.random().toString(36).substring(2);
+        }
+
+        /**
+         * Formats a timestamp into a human-readable string.
+         * @param {string} timestampString - The ISO string timestamp.
+         * @returns {string} Formatted date and time.
+         */
+        function formatTimestamp(timestampString) {
+            const date = new Date(timestampString);
+            const options = {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            };
+            return date.toLocaleString('en-US', options);
+        }
+
+        /**
+         * Saves the current notes array to localStorage.
+         */
+        function saveNotes() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(notes));
+            } catch (error) {
+                console.error('Error saving notes to localStorage:', error);
+                // In a real app, you might show a user-friendly message here
+            }
+        }
+
+        /**
+         * Loads notes from localStorage.
+         * @returns {Array} The loaded notes array, or an empty array if none.
+         */
+        function loadNotes() {
+            try {
+                const storedNotes = localStorage.getItem(LOCAL_STORAGE_KEY);
+                return storedNotes ? JSON.parse(storedNotes) : [];
+            } catch (error) {
+                console.error('Error loading notes from localStorage:', error);
+                return []; // Return empty array if parsing fails
+            }
+        }
+
+        /**
+         * Renders a single note item into the DOM.
+         * @param {object} note - The note object to render.
+         * @returns {HTMLElement} The created note element.
+         */
+        function createNoteElement(note) {
+            const noteDiv = document.createElement('div');
+            noteDiv.id = `note-${note.id}`;
+            noteDiv.classList.add('note-item');
+            if (note.archived) {
+                noteDiv.classList.add('archived');
+            }
+
+            // Note content
+            const contentPara = document.createElement('p');
+            contentPara.classList.add('note-content', 'text-gray-900', 'text-base');
+            contentPara.textContent = note.text;
+            noteDiv.appendChild(contentPara);
+
+            // Timestamp
+            const timestampSpan = document.createElement('span');
+            timestampSpan.classList.add('note-timestamp');
+            timestampSpan.textContent = `Recorded: ${formatTimestamp(note.timestamp)}`;
+            noteDiv.appendChild(timestampSpan);
+
+            // Actions (Archive/Unarchive, Delete)
+            const actionsDiv = document.createElement('div');
+            actionsDiv.classList.add('note-actions', 'mt-2');
+
+            const archiveButton = document.createElement('button');
+            archiveButton.classList.add('px-3', 'py-1', 'rounded-md', 'text-white', 'text-xs', 'font-medium', 'transition-colors', 'duration-200');
+            if (note.archived) {
+                archiveButton.textContent = 'Unarchive';
+                archiveButton.classList.add('bg-green-500', 'hover:bg-green-600');
+            } else {
+                archiveButton.textContent = 'Archive';
+                archiveButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+            }
+            archiveButton.addEventListener('click', () => toggleArchiveNote(note.id));
+            actionsDiv.appendChild(archiveButton);
+
+            // ONLY show delete button if the note is archived
+            if (note.archived) {
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.classList.add('bg-red-500', 'hover:bg-red-600', 'px-3', 'py-1', 'rounded-md', 'text-white', 'text-xs', 'font-medium', 'transition-colors', 'duration-200');
+                deleteButton.addEventListener('click', () => deleteNote(note.id));
+                actionsDiv.appendChild(deleteButton);
+            }
+
+            noteDiv.appendChild(actionsDiv);
+
+            return noteDiv;
+        }
+
+        /**
+         * Renders all notes from the 'notes' array into the active and archived lists.
+         */
+        function renderNotes() {
+            activeNotesList.innerHTML = '';
+            archivedNotesList.innerHTML = '';
+
+            const active = notes.filter(note => !note.archived);
+            const archived = notes.filter(note => note.archived);
+
+            // Sort active notes by timestamp in descending order (most recent first)
+            active.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            // Sort archived notes by timestamp in descending order (most recent first)
+            archived.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+
+            if (active.length === 0) {
+                noActiveNotesMessage.classList.remove('hidden');
+            } else {
+                noActiveNotesMessage.classList.add('hidden');
+                active.forEach(note => {
+                    activeNotesList.appendChild(createNoteElement(note));
+                });
+            }
+
+            if (archived.length === 0) {
+                noArchivedNotesMessage.classList.remove('hidden');
+            } else {
+                noArchivedNotesMessage.classList.add('hidden');
+                archived.forEach(note => {
+                    archivedNotesList.appendChild(createNoteElement(note));
+                });
+            }
+        }
+
+        /**
+         * Adds a new note based on the textarea content.
+         */
+        function addNote() {
+            const noteText = noteTextarea.value.trim();
+            if (noteText) {
+                const newNote = {
+                    id: generateUniqueId(),
+                    text: noteText,
+                    timestamp: new Date().toISOString(), // ISO string for easy storage and parsing
+                    archived: false
+                };
+                notes.push(newNote);
+                saveNotes();
+                renderNotes();
+                noteTextarea.value = ''; // Clear the textarea
+            } else {
+                // You could add a visual cue for the user here, e.g., highlight the textarea
+                console.log('Note content cannot be empty.');
+            }
+        }
+
+        /**
+         * Toggles the archived status of a note.
+         * @param {string} id - The ID of the note to toggle.
+         */
+        function toggleArchiveNote(id) {
+            const noteIndex = notes.findIndex(note => note.id === id);
+            if (noteIndex !== -1) {
+                notes[noteIndex].archived = !notes[noteIndex].archived;
+                saveNotes();
+                renderNotes();
+            }
+        }
+
+        /**
+         * Deletes a note from the array.
+         * @param {string} id - The ID of the note to delete.
+         */
+        function deleteNote(id) {
+            // Confirm deletion only if the item is indeed archived (double check for safety)
+            const noteToDelete = notes.find(note => note.id === id);
+            if (noteToDelete && noteToDelete.archived) {
+                notes = notes.filter(note => note.id !== id);
+                saveNotes();
+                renderNotes();
+            } else {
+                console.warn('Attempted to delete a non-archived note or note not found.');
+                // In a real app, you might show a user-friendly message, e.g., "Only archived notes can be deleted."
+            }
+        }
+
+        /**
+         * Escapes text for CSV to handle commas and quotes.
+         * @param {string} value - The string value to escape.
+         * @returns {string} The escaped string.
+         */
+        function escapeCsv(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            // Convert to string in case it's a boolean or number
+            let stringValue = String(value);
+            // If the value contains a comma, double quote, or newline,
+            // enclose it in double quotes and escape any existing double quotes.
+            if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                return `"${stringValue.replace(/"/g, '""')}"`;
+            }
+            return stringValue;
+        }
+
+        /**
+         * Downloads all notes as a CSV file.
+         */
+        function downloadNotesAsCsv() {
+            if (notes.length === 0) {
+                console.log('No notes to download.');
+                // You might display a temporary message to the user here
+                return;
+            }
+
+            // Define CSV headers
+            const headers = ['ID', 'Note Content', 'Timestamp', 'Archived'];
+            // Map notes to an array of arrays, with each inner array representing a row
+            const rows = notes.map(note => [
+                escapeCsv(note.id),
+                escapeCsv(note.text),
+                escapeCsv(note.timestamp), // Use ISO string for consistency in import/export
+                escapeCsv(note.archived ? 'true' : 'false') // Use true/false strings for boolean
+            ]);
+
+            // Combine headers and rows
+            const csvContent = [
+                headers.join(','),
+                ...rows.map(row => row.join(','))
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', 'notes.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+
+            // Close the menu after download
+            menuOverlay.classList.remove('show');
+        }
+
+        /**
+         * Handles the import of notes from a CSV file.
+         */
+        function handleCsvImport() {
+            const file = csvFileInput.files[0];
+            if (!file) {
+                console.log('No file selected for import.');
+                // You might display a temporary message to the user here
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = (event) => {
+                const csvString = event.target.result;
+                const importedNotes = parseCsvToNotes(csvString);
+
+                if (importedNotes.length > 0) {
+                    // Add new notes to existing ones, ensuring unique IDs
+                    const existingIds = new Set(notes.map(note => note.id));
+                    importedNotes.forEach(newNote => {
+                        // If imported note has an ID that clashes, generate a new one
+                        if (existingIds.has(newNote.id)) {
+                            newNote.id = generateUniqueId();
+                        }
+                        notes.push(newNote);
+                    });
+                    saveNotes();
+                    renderNotes();
+                    console.log(`Successfully imported ${importedNotes.length} notes.`);
+                    // Optional: Clear the file input
+                    csvFileInput.value = '';
+                } else {
+                    console.warn('No valid notes found in the imported CSV.');
+                }
+                 // Close the menu after import
+                 menuOverlay.classList.remove('show');
+            };
+
+            reader.onerror = () => {
+                console.error('Error reading file:', reader.error);
+                // You might display an error message to the user here
+            };
+
+            reader.readAsText(file);
+        }
+
+        /**
+         * Parses a CSV string into an array of note objects.
+         * Assumes headers: ID, Note Content, Timestamp, Archived
+         * @param {string} csvString - The CSV content as a string.
+         * @returns {Array<object>} An array of parsed note objects.
+         */
+        function parseCsvToNotes(csvString) {
+            const lines = csvString.trim().split('\n');
+            if (lines.length === 0) return [];
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const notesArray = [];
+
+            // Simple CSV parsing for this specific format
+            for (let i = 1; i < lines.length; i++) {
+                const values = [];
+                let inQuote = false;
+                let currentVal = '';
+                for (let j = 0; j < lines[i].length; j++) {
+                    const char = lines[i][j];
+                    if (char === '"') {
+                        if (inQuote && lines[i][j + 1] === '"') {
+                            // Escaped double quote
+                            currentVal += '"';
+                            j++; // Skip next quote
+                        } else {
+                            inQuote = !inQuote;
+                        }
+                    } else if (char === ',' && !inQuote) {
+                        values.push(currentVal.trim());
+                        currentVal = '';
+                    } else {
+                        currentVal += char;
+                    }
+                }
+                values.push(currentVal.trim()); // Add the last value
+
+                if (values.length === headers.length) {
+                    const note = {
+                        id: values[headers.indexOf('ID')] || generateUniqueId(), // Use existing ID or generate new
+                        text: values[headers.indexOf('Note Content')] || '',
+                        timestamp: values[headers.indexOf('Timestamp')] || new Date().toISOString(),
+                        archived: (values[headers.indexOf('Archived')] === 'true')
+                    };
+                    notesArray.push(note);
+                } else {
+                    console.warn('Skipping malformed CSV row:', lines[i]);
+                }
+            }
+            return notesArray;
+        }
+
+        /**
+         * Displays a custom confirmation modal.
+         * @param {string} message - The message to display in the modal.
+         * @param {function} onConfirm - Callback for confirm action.
+         * @param {function} onCancel - Callback for cancel action.
+         */
+        function showConfirmationModal(message, onConfirm, onCancel) {
+            modalMessage.textContent = message;
+            confirmationModal.classList.add('show');
+
+            // Clear previous listeners to prevent multiple calls
+            modalConfirmBtn.onclick = null;
+            modalCancelBtn.onclick = null;
+
+            modalConfirmBtn.onclick = () => {
+                hideConfirmationModal();
+                onConfirm();
+            };
+            modalCancelBtn.onclick = () => {
+                hideConfirmationModal();
+                onCancel();
+            };
+        }
+
+        /**
+         * Hides the custom confirmation modal.
+         */
+        function hideConfirmationModal() {
+            confirmationModal.classList.remove('show');
+            currentConfirmationStep = 0; // Reset confirmation step for "Clear All Notes"
+        }
+
+        /**
+         * Initiates the clear all notes process with double confirmation.
+         */
+        function initiateClearAllNotes() {
+            // Close the menu before showing the confirmation modal
+            menuOverlay.classList.remove('show');
+
+            currentConfirmationStep = 1;
+            showConfirmationModal(
+                'Are you absolutely sure you want to clear ALL notes?',
+                () => {
+                    // First confirmation (Yes)
+                    currentConfirmationStep = 2;
+                    showConfirmationModal(
+                        'This action cannot be undone. Are you certain?',
+                        () => {
+                            // Second confirmation (Yes)
+                            notes = [];
+                            saveNotes();
+                            renderNotes();
+                            console.log('All notes cleared.');
+                            hideConfirmationModal();
+                        },
+                        () => {
+                            // Second confirmation (No)
+                            console.log('Clear all notes cancelled on second step.');
+                            hideConfirmationModal();
+                        }
+                    );
+                },
+                () => {
+                    // First confirmation (No)
+                    console.log('Clear all notes cancelled on first step.');
+                    hideConfirmationModal();
+                }
+            );
+        }
+
+        /**
+         * Shows the Help modal.
+         */
+        function showHelpModal() {
+            menuOverlay.classList.remove('show'); // Close menu
+            helpModal.classList.add('show');
+        }
+
+        /**
+         * Hides the Help modal.
+         */
+        function hideHelpModal() {
+            helpModal.classList.remove('show');
+        }
+
+        /**
+         * Shows the About modal.
+         */
+        function showAboutModal() {
+            menuOverlay.classList.remove('show'); // Close menu
+            aboutModal.classList.add('show');
+        }
+
+        /**
+         * Hides the About modal.
+         */
+        function hideAboutModal() {
+            aboutModal.classList.remove('show');
+        }
+
+        // Event Listeners
+        addNoteButton.addEventListener('click', addNote);
+
+        // Hamburger Menu Event Listeners
+        hamburgerIcon.addEventListener('click', () => {
+            menuOverlay.classList.add('show');
+        });
+        closeMenuBtn.addEventListener('click', () => {
+            menuOverlay.classList.remove('show');
+        });
+
+        // Menu Item Event Listeners
+        menuDownloadNotesBtn.addEventListener('click', downloadNotesAsCsv);
+        // For import, click the hidden file input when the menu button is clicked
+        menuImportNotesBtn.addEventListener('click', () => {
+            csvFileInput.click();
+        });
+        csvFileInput.addEventListener('change', handleCsvImport); // Handle file selection once dialog closes
+
+        menuClearAllNotesBtn.addEventListener('click', initiateClearAllNotes);
+        menuHelpBtn.addEventListener('click', showHelpModal);
+        menuAboutBtn.addEventListener('click', showAboutModal);
+
+        // Modal Close Button Listeners
+        closeHelpModalBtn.addEventListener('click', hideHelpModal);
+        closeAboutModalBtn.addEventListener('click', hideAboutModal);
+
+
+        // Allow adding note with Ctrl+Enter key
+        noteTextarea.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { // metaKey for Cmd on Mac
+                event.preventDefault(); // Prevent default new line behavior
+                addNote();
+            }
+        });
+
+        // Initial load and render of notes when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            notes = loadNotes();
+            renderNotes();
+        });
+    </script>
+</body>
+</html>
+
